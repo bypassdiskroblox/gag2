@@ -1,0 +1,702 @@
+if _G.PrivateProjectActive then
+    _G.PrivateProjectActive = false
+    task.wait(0.2)
+end
+
+_G.PrivateProjectActive = true
+_G.AutoHarvest = false
+_G.AutoSell = false
+_G.IsHarvesting = false
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+local ParentGui
+local success, err = pcall(function()
+    ParentGui = game:GetService("CoreGui")
+end)
+if not success or not ParentGui then
+    ParentGui = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local GUI_NAME = "PrivateProjectGui"
+local oldGui = ParentGui:FindFirstChild(GUI_NAME)
+if oldGui then
+    pcall(function() oldGui:Destroy() end)
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = GUI_NAME
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = ParentGui
+
+local activeNotification
+local function notify(title, content, duration)
+    duration = duration or 3
+    if activeNotification then
+        pcall(function() activeNotification:Destroy() end)
+    end
+    
+    local notificationFrame = Instance.new("Frame")
+    activeNotification = notificationFrame
+    notificationFrame.Size = UDim2.new(0, 260, 0, 65)
+    notificationFrame.Position = UDim2.new(1, 10, 1, -80)
+    notificationFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+    notificationFrame.BackgroundTransparency = 0.15
+    notificationFrame.BorderSizePixel = 0
+    
+    local uicorner = Instance.new("UICorner")
+    uicorner.CornerRadius = UDim.new(0, 8)
+    uicorner.Parent = notificationFrame
+    
+    local uistroke = Instance.new("UIStroke")
+    uistroke.Color = Color3.fromRGB(0, 220, 255)
+    uistroke.Thickness = 1
+    uistroke.Parent = notificationFrame
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -20, 0, 22)
+    titleLabel.Position = UDim2.new(0, 12, 0, 6)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 13
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Text = title
+    titleLabel.Parent = notificationFrame
+    
+    local contentLabel = Instance.new("TextLabel")
+    contentLabel.Size = UDim2.new(1, -20, 0, 30)
+    contentLabel.Position = UDim2.new(0, 12, 0, 26)
+    contentLabel.BackgroundTransparency = 1
+    contentLabel.Font = Enum.Font.GothamMedium
+    contentLabel.TextSize = 11
+    contentLabel.TextColor3 = Color3.fromRGB(170, 170, 180)
+    contentLabel.TextXAlignment = Enum.TextXAlignment.Left
+    contentLabel.TextWrapped = true
+    contentLabel.Text = content
+    contentLabel.Parent = notificationFrame
+    
+    notificationFrame.Parent = ScreenGui
+    
+    local slideInPos = UDim2.new(1, -280, 1, -90)
+    TweenService:Create(notificationFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = slideInPos}):Play()
+    
+    task.delay(duration, function()
+        if notificationFrame and notificationFrame.Parent then
+            local slideOutPos = UDim2.new(1, 10, 1, -90)
+            local tween = TweenService:Create(notificationFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = slideOutPos})
+            tween:Play()
+            tween.Completed:Connect(function()
+                notificationFrame:Destroy()
+                if activeNotification == notificationFrame then
+                    activeNotification = nil
+                end
+            end)
+        end
+    end)
+end
+
+local myPlot = nil
+
+local function findMyPlot()
+    local gardens = workspace:FindFirstChild("Gardens")
+    if not gardens then return nil end
+    
+    for _, plot in ipairs(gardens:GetChildren()) do
+        if plot.Name:match("^Plot") or plot:FindFirstChild("Plants") then
+            local owner = plot:FindFirstChild("Owner")
+            if owner then
+                if owner:IsA("ValueBase") then
+                    if owner.Value == LocalPlayer or owner.Value == LocalPlayer.Name or tostring(owner.Value) == tostring(LocalPlayer.UserId) then
+                        return plot
+                    end
+                elseif owner:IsA("Player") and owner == LocalPlayer then
+                    return plot
+                end
+            end
+            
+            for _, child in ipairs(plot:GetChildren()) do
+                if child.Name:lower():match("owner") or child.Name:lower():match("player") then
+                    if child:IsA("ValueBase") then
+                        if child.Value == LocalPlayer or child.Value == LocalPlayer.Name or tostring(child.Value) == tostring(LocalPlayer.UserId) then
+                            return plot
+                        end
+                    end
+                end
+            end
+            
+            for attrName, attrValue in pairs(plot:GetAttributes()) do
+                if attrName:lower():match("owner") or attrName:lower():match("player") then
+                    if attrValue == LocalPlayer.Name or tostring(attrValue) == tostring(LocalPlayer.UserId) or attrValue == LocalPlayer then
+                        return plot
+                    end
+                end
+            end
+            
+            if plot.Name == LocalPlayer.Name or plot.Name == tostring(LocalPlayer.UserId) then
+                return plot
+            end
+        end
+    end
+    
+    return nil
+end
+
+local function getMyPlot()
+    local gardens = workspace:FindFirstChild("Gardens")
+    if not gardens then return nil end
+    
+    if myPlot and myPlot.Parent == gardens then
+        return myPlot
+    end
+    
+    myPlot = findMyPlot()
+    if myPlot then
+        notify("Plot Cached", "Ваш плот успешно найден: " .. myPlot.Name, 3)
+    end
+    return myPlot
+end
+
+local function harvestObject(obj, rootPart)
+    local harvestPart = obj:FindFirstChild("HarvestPart")
+    if harvestPart then
+        local prompt = harvestPart:FindFirstChild("HarvestPrompt") or harvestPart:FindFirstChildWhichIsA("ProximityPrompt")
+        if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled then
+            pcall(function() rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
+            rootPart.CFrame = harvestPart.CFrame * CFrame.new(0, 1.5, 0)
+            task.wait(0.15)
+            
+            if prompt.Enabled then
+                fireproximityprompt(prompt)
+                task.wait(0.05)
+            end
+            return true
+        end
+    end
+    return false
+end
+
+task.spawn(function()
+    while _G.PrivateProjectActive do
+        task.wait(0.5)
+        
+        if _G.AutoHarvest then
+            local character = LocalPlayer.Character
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+            
+            if rootPart then
+                _G.IsHarvesting = true
+                pcall(function() rootPart.Anchored = true end)
+                
+                pcall(function()
+                    local plot = getMyPlot()
+                    if plot then
+                        local plants = plot:FindFirstChild("Plants")
+                        if plants then
+                            local originalCFrame = rootPart.CFrame
+                            local teleported = false
+                            
+                            for _, plant in ipairs(plants:GetChildren()) do
+                                if not _G.AutoHarvest or not _G.PrivateProjectActive then break end
+                                
+                                local plantHarvested = harvestObject(plant, rootPart)
+                                if plantHarvested then
+                                    teleported = true
+                                end
+                                
+                                local fruitsFolder = plant:FindFirstChild("Fruits")
+                                if fruitsFolder then
+                                    for _, fruit in ipairs(fruitsFolder:GetChildren()) do
+                                        if not _G.AutoHarvest or not _G.PrivateProjectActive then break end
+                                        
+                                        local fruitHarvested = harvestObject(fruit, rootPart)
+                                        if fruitHarvested then
+                                            teleported = true
+                                        end
+                                    end
+                                end
+                            end
+                            
+                            if teleported and _G.AutoHarvest and rootPart and rootPart.Parent then
+                                pcall(function() rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
+                                rootPart.CFrame = originalCFrame
+                                task.wait(0.1)
+                            end
+                        end
+                    end
+                end)
+                
+                pcall(function() rootPart.Anchored = false end)
+                _G.IsHarvesting = false
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    while _G.PrivateProjectActive do
+        task.wait(1.0)
+        
+        if _G.AutoSell then
+            pcall(function()
+                local event = game:GetService("ReplicatedStorage")
+                    :WaitForChild("SharedModules", 2)
+                    :WaitForChild("Packet", 2)
+                    :WaitForChild("RemoteEvent", 2)
+                
+                if event and event:IsA("RemoteEvent") then
+                    event:FireServer(buffer.fromstring("\x99\x00\x11"))
+                end
+            end)
+        end
+    end
+end)
+
+local connections = {}
+
+local noclipConn = RunService.Stepped:Connect(function()
+    if not _G.PrivateProjectActive then
+        if noclipConn then noclipConn:Disconnect() end
+        return
+    end
+    if _G.AutoHarvest and _G.IsHarvesting then
+        pcall(function()
+            local char = LocalPlayer.Character
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+    end
+end)
+table.insert(connections, noclipConn)
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 320, 0, 210)
+MainFrame.Position = UDim2.new(0.5, -160, 0.5, -105)
+MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+MainFrame.BackgroundTransparency = 0.15
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(255, 255, 255)
+MainStroke.Thickness = 1.5
+MainStroke.Parent = MainFrame
+
+local StrokeGradient = Instance.new("UIGradient")
+StrokeGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 220, 255)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(130, 50, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 220, 255))
+})
+StrokeGradient.Rotation = 45
+StrokeGradient.Parent = MainStroke
+
+task.spawn(function()
+    while _G.PrivateProjectActive and ScreenGui.Parent do
+        for rot = 0, 360, 1 do
+            if not _G.PrivateProjectActive or not ScreenGui.Parent then break end
+            StrokeGradient.Rotation = rot
+            task.wait(0.03)
+        end
+    end
+end)
+
+local TopBar = Instance.new("Frame")
+TopBar.Name = "TopBar"
+TopBar.Size = UDim2.new(1, 0, 0, 42)
+TopBar.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+TopBar.BackgroundTransparency = 0.1
+TopBar.BorderSizePixel = 0
+TopBar.Parent = MainFrame
+
+local TopCorner = Instance.new("UICorner")
+TopCorner.CornerRadius = UDim.new(0, 12)
+TopCorner.Parent = TopBar
+
+local TopCover = Instance.new("Frame")
+TopCover.Size = UDim2.new(1, 0, 0, 8)
+TopCover.Position = UDim2.new(0, 0, 1, -8)
+TopCover.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+TopCover.BorderSizePixel = 0
+TopCover.Parent = TopBar
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -70, 1, 0)
+Title.Position = UDim2.new(0, 15, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.Text = "privateproject.xyz"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 14
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TopBar
+
+local TitleGlow = Instance.new("UIGradient")
+TitleGlow.Color = ColorSequence.new(Color3.fromRGB(0, 220, 255), Color3.fromRGB(180, 100, 255))
+TitleGlow.Parent = Title
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -38, 0.5, -15)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.fromRGB(140, 140, 150)
+CloseBtn.TextSize = 22
+CloseBtn.Parent = TopBar
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 30, 0, 30)
+MinBtn.Position = UDim2.new(1, -70, 0.5, -15)
+MinBtn.BackgroundTransparency = 1
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.Text = "−"
+MinBtn.TextColor3 = Color3.fromRGB(140, 140, 150)
+MinBtn.TextSize = 20
+MinBtn.Parent = TopBar
+
+local function createBtnHover(btn, hoverColor)
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = hoverColor}):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(140, 140, 150)}):Play()
+    end)
+end
+createBtnHover(CloseBtn, Color3.fromRGB(255, 75, 75))
+createBtnHover(MinBtn, Color3.fromRGB(0, 220, 255))
+
+local dragging, dragInput, dragStart, startPos
+local function updateDrag(input)
+    local delta = input.Position - dragStart
+    local targetPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    TweenService:Create(MainFrame, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+end
+
+TopBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+TopBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        updateDrag(input)
+    end
+end)
+
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Name = "ContentFrame"
+ContentFrame.Size = UDim2.new(1, -24, 1, -54)
+ContentFrame.Position = UDim2.new(0, 12, 0, 48)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Parent = MainFrame
+
+local ContentLayout = Instance.new("UIListLayout")
+ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ContentLayout.Padding = UDim.new(0, 10)
+ContentLayout.Parent = ContentFrame
+
+local function createToggle(parent, text, default, callback)
+    local toggleFrame = Instance.new("Frame")
+    toggleFrame.Size = UDim2.new(1, 0, 0, 46)
+    toggleFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+    toggleFrame.BackgroundTransparency = 0.2
+    toggleFrame.BorderSizePixel = 0
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = toggleFrame
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(35, 35, 45)
+    stroke.Thickness = 1
+    stroke.Parent = toggleFrame
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -75, 1, 0)
+    label.Position = UDim2.new(0, 12, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.GothamSemibold
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(220, 220, 230)
+    label.TextSize = 12
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = toggleFrame
+    
+    local switchBtn = Instance.new("TextButton")
+    switchBtn.Size = UDim2.new(0, 50, 0, 24)
+    switchBtn.Position = UDim2.new(1, -62, 0.5, -12)
+    switchBtn.BackgroundColor3 = default and Color3.fromRGB(0, 220, 120) or Color3.fromRGB(45, 45, 50)
+    switchBtn.Text = ""
+    switchBtn.AutoButtonColor = false
+    switchBtn.Parent = toggleFrame
+    
+    local switchCorner = Instance.new("UICorner")
+    switchCorner.CornerRadius = UDim.new(1, 0)
+    switchCorner.Parent = switchBtn
+    
+    local switchStroke = Instance.new("UIStroke")
+    switchStroke.Color = Color3.fromRGB(55, 55, 65)
+    switchStroke.Thickness = 1
+    switchStroke.Parent = switchBtn
+    
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 16, 0, 16)
+    knob.Position = default and UDim2.new(1, -20, 0.5, -8) or UDim2.new(0, 4, 0.5, -8)
+    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    knob.Parent = switchBtn
+    
+    local knobCorner = Instance.new("UICorner")
+    knobCorner.CornerRadius = UDim.new(1, 0)
+    knobCorner.Parent = knob
+    
+    local state = default
+    
+    local function toggleState()
+        state = not state
+        local targetColor = state and Color3.fromRGB(0, 220, 120) or Color3.fromRGB(45, 45, 50)
+        local targetPos = state and UDim2.new(1, -20, 0.5, -8) or UDim2.new(0, 4, 0.5, -8)
+        
+        TweenService:Create(switchBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundColor3 = targetColor}):Play()
+        TweenService:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+        
+        callback(state)
+    end
+    
+    switchBtn.MouseButton1Click:Connect(toggleState)
+    
+    local hitBtn = Instance.new("TextButton")
+    hitBtn.Size = UDim2.new(1, 0, 1, 0)
+    hitBtn.BackgroundTransparency = 1
+    hitBtn.Text = ""
+    hitBtn.ZIndex = 0
+    hitBtn.Parent = toggleFrame
+    hitBtn.MouseButton1Click:Connect(toggleState)
+    
+    toggleFrame.MouseEnter:Connect(function()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(0, 220, 255)}):Play()
+        TweenService:Create(toggleFrame, TweenInfo.new(0.2), {BackgroundTransparency = 0.05}):Play()
+    end)
+    toggleFrame.MouseLeave:Connect(function()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(35, 35, 45)}):Play()
+        TweenService:Create(toggleFrame, TweenInfo.new(0.2), {BackgroundTransparency = 0.2}):Play()
+    end)
+    
+    toggleFrame.Parent = parent
+end
+
+createToggle(ContentFrame, "Auto Harvest Plants", false, function(val)
+    _G.AutoHarvest = val
+    notify("Auto Harvest", val and "Авто-сбор урожая активирован" or "Авто-сбор урожая отключен")
+end)
+
+createToggle(ContentFrame, "Auto Sell Items", false, function(val)
+    _G.AutoSell = val
+    notify("Auto Sell", val and "Авто-продажа активирована" or "Авто-продажа отключена")
+end)
+
+local FooterFrame = Instance.new("Frame")
+FooterFrame.Size = UDim2.new(1, 0, 0, 32)
+FooterFrame.BackgroundTransparency = 1
+FooterFrame.Parent = ContentFrame
+
+local UnloadButton = Instance.new("TextButton")
+UnloadButton.Size = UDim2.new(1, 0, 1, 0)
+UnloadButton.BackgroundColor3 = Color3.fromRGB(192, 57, 43)
+UnloadButton.Font = Enum.Font.GothamBold
+UnloadButton.Text = "UNLOAD"
+UnloadButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+UnloadButton.TextSize = 11
+UnloadButton.AutoButtonColor = false
+UnloadButton.Parent = FooterFrame
+
+local UnloadCorner = Instance.new("UICorner")
+UnloadCorner.CornerRadius = UDim.new(0, 6)
+UnloadCorner.Parent = UnloadButton
+
+UnloadButton.MouseEnter:Connect(function()
+    TweenService:Create(UnloadButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(231, 76, 60)}):Play()
+end)
+UnloadButton.MouseLeave:Connect(function()
+    TweenService:Create(UnloadButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(192, 57, 43)}):Play()
+end)
+
+local MiniBtnFrame = Instance.new("Frame")
+MiniBtnFrame.Name = "MiniBtnFrame"
+MiniBtnFrame.Size = UDim2.new(0, 48, 0, 48)
+MiniBtnFrame.Position = UDim2.new(0, 30, 0, 30)
+MiniBtnFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+MiniBtnFrame.BackgroundTransparency = 0.15
+MiniBtnFrame.BorderSizePixel = 0
+MiniBtnFrame.Visible = false
+MiniBtnFrame.Parent = ScreenGui
+
+local MiniCorner = Instance.new("UICorner")
+MiniCorner.CornerRadius = UDim.new(1, 0)
+MiniCorner.Parent = MiniBtnFrame
+
+local MiniStroke = Instance.new("UIStroke")
+MiniStroke.Color = Color3.fromRGB(0, 220, 255)
+MiniStroke.Thickness = 2.0
+MiniStroke.Parent = MiniBtnFrame
+
+local MiniClick = Instance.new("TextButton")
+MiniClick.Size = UDim2.new(1, 0, 1, 0)
+MiniClick.BackgroundTransparency = 1
+MiniClick.Font = Enum.Font.GothamBold
+MiniClick.Text = "PP"
+MiniClick.TextColor3 = Color3.fromRGB(0, 220, 255)
+MiniClick.TextSize = 18
+MiniClick.Parent = MiniBtnFrame
+
+local MiniGradient = Instance.new("UIGradient")
+MiniGradient.Color = ColorSequence.new(Color3.fromRGB(0, 220, 255), Color3.fromRGB(180, 100, 255))
+MiniGradient.Parent = MiniClick
+
+local miniDragging, miniDragInput, miniDragStart, miniStartPos
+local function updateMiniDrag(input)
+    local delta = input.Position - miniDragStart
+    local targetPos = UDim2.new(miniStartPos.X.Scale, miniStartPos.X.Offset + delta.X, miniStartPos.Y.Scale, miniStartPos.Y.Offset + delta.Y)
+    TweenService:Create(MiniBtnFrame, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+end
+
+MiniClick.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        miniDragging = true
+        miniDragStart = input.Position
+        miniStartPos = MiniBtnFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                miniDragging = false
+            end
+        end)
+    end
+end)
+
+MiniClick.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        miniDragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == miniDragInput and miniDragging then
+        updateMiniDrag(input)
+    end
+end)
+
+local function minimize()
+    MainFrame.ClipsDescendants = true
+    local shrinkTween = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+        Size = UDim2.new(0, 0, 0, 0),
+        Position = UDim2.new(0, MiniBtnFrame.AbsolutePosition.X + 24, 0, MiniBtnFrame.AbsolutePosition.Y + 24),
+        BackgroundTransparency = 1
+    })
+    shrinkTween:Play()
+    shrinkTween.Completed:Connect(function()
+        MainFrame.Visible = false
+        MiniBtnFrame.Visible = true
+        MiniBtnFrame.Size = UDim2.new(0, 0, 0, 0)
+        TweenService:Create(MiniBtnFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 48, 0, 48)
+        }):Play()
+    end)
+end
+
+local function restore()
+    MiniBtnFrame.Visible = false
+    MainFrame.Visible = true
+    MainFrame.BackgroundTransparency = 0.15
+    local expandTween = TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 320, 0, 210),
+        Position = UDim2.new(0.5, -160, 0.5, -105)
+    })
+    expandTween:Play()
+end
+
+MinBtn.MouseButton1Click:Connect(minimize)
+MiniClick.MouseButton1Click:Connect(function()
+    if not miniDragging then
+        restore()
+    end
+end)
+
+local function unloadScript()
+    _G.PrivateProjectActive = false
+    _G.AutoHarvest = false
+    _G.AutoSell = false
+    _G.IsHarvesting = false
+    
+    notify("Unloading", "Выгрузка скрипта privateproject.xyz...", 1.5)
+    
+    for _, conn in ipairs(connections) do
+        if conn then pcall(function() conn:Disconnect() end) end
+    end
+    
+    pcall(function()
+        local char = LocalPlayer.Character
+        local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+        if rootPart then
+            rootPart.Anchored = false
+        end
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+    end)
+    
+    TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Size = UDim2.new(0, 320, 0, 0),
+        BackgroundTransparency = 1
+    }):Play()
+    
+    task.wait(0.35)
+    pcall(function() ScreenGui:Destroy() end)
+end
+
+CloseBtn.MouseButton1Click:Connect(unloadScript)
+UnloadButton.MouseButton1Click:Connect(unloadScript)
+
+MainFrame.Size = UDim2.new(0, 0, 0, 0)
+MainFrame.BackgroundTransparency = 1
+TweenService:Create(MainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+    Size = UDim2.new(0, 320, 0, 210),
+    BackgroundTransparency = 0.15
+}):Play()
+
+notify("Loaded successfully", "Скрипт privateproject.xyz успешно запущен!", 4)

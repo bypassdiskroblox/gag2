@@ -6,13 +6,25 @@ end
 _G.PrivateProjectActive = true
 _G.AutoHarvest = false
 _G.AutoSell = false
+_G.AutoBuySeeds = false
 _G.IsHarvesting = false
+_G.MinFruitsToHarvest = 10
+_G.SelectedSeeds = {}
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
+
+local Color3_fromRGB = Color3.fromRGB
+local UDim2_new = UDim2.new
+local UDim_new = UDim.new
+local Vector3_new = Vector3.new
+local Vector2_new = Vector2.new
+local CFrame_new = CFrame.new
+local TweenInfo_new = TweenInfo.new
+local Instance_new = Instance.new
 
 local ParentGui
 local success, err = pcall(function()
@@ -28,7 +40,7 @@ if oldGui then
     pcall(function() oldGui:Destroy() end)
 end
 
-local ScreenGui = Instance.new("ScreenGui")
+local ScreenGui = Instance_new("ScreenGui")
 ScreenGui.Name = GUI_NAME
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -41,41 +53,41 @@ local function notify(title, content, duration)
         pcall(function() activeNotification:Destroy() end)
     end
     
-    local notificationFrame = Instance.new("Frame")
+    local notificationFrame = Instance_new("Frame")
     activeNotification = notificationFrame
-    notificationFrame.Size = UDim2.new(0, 260, 0, 65)
-    notificationFrame.Position = UDim2.new(1, 10, 1, -80)
-    notificationFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+    notificationFrame.Size = UDim2_new(0, 260, 0, 65)
+    notificationFrame.Position = UDim2_new(1, 10, 1, -80)
+    notificationFrame.BackgroundColor3 = Color3_fromRGB(12, 12, 16)
     notificationFrame.BackgroundTransparency = 0.15
     notificationFrame.BorderSizePixel = 0
     
-    local uicorner = Instance.new("UICorner")
-    uicorner.CornerRadius = UDim.new(0, 8)
+    local uicorner = Instance_new("UICorner")
+    uicorner.CornerRadius = UDim_new(0, 8)
     uicorner.Parent = notificationFrame
     
-    local uistroke = Instance.new("UIStroke")
-    uistroke.Color = Color3.fromRGB(0, 220, 255)
+    local uistroke = Instance_new("UIStroke")
+    uistroke.Color = Color3_fromRGB(0, 220, 255)
     uistroke.Thickness = 1
     uistroke.Parent = notificationFrame
     
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Size = UDim2.new(1, -20, 0, 22)
-    titleLabel.Position = UDim2.new(0, 12, 0, 6)
+    local titleLabel = Instance_new("TextLabel")
+    titleLabel.Size = UDim2_new(1, -20, 0, 22)
+    titleLabel.Position = UDim2_new(0, 12, 0, 6)
     titleLabel.BackgroundTransparency = 1
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.TextSize = 13
-    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextColor3 = Color3_fromRGB(255, 255, 255)
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.Text = title
     titleLabel.Parent = notificationFrame
     
-    local contentLabel = Instance.new("TextLabel")
-    contentLabel.Size = UDim2.new(1, -20, 0, 30)
-    contentLabel.Position = UDim2.new(0, 12, 0, 26)
+    local contentLabel = Instance_new("TextLabel")
+    contentLabel.Size = UDim2_new(1, -20, 0, 30)
+    contentLabel.Position = UDim2_new(0, 12, 0, 26)
     contentLabel.BackgroundTransparency = 1
     contentLabel.Font = Enum.Font.GothamMedium
     contentLabel.TextSize = 11
-    contentLabel.TextColor3 = Color3.fromRGB(170, 170, 180)
+    contentLabel.TextColor3 = Color3_fromRGB(170, 170, 180)
     contentLabel.TextXAlignment = Enum.TextXAlignment.Left
     contentLabel.TextWrapped = true
     contentLabel.Text = content
@@ -83,13 +95,13 @@ local function notify(title, content, duration)
     
     notificationFrame.Parent = ScreenGui
     
-    local slideInPos = UDim2.new(1, -280, 1, -90)
-    TweenService:Create(notificationFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = slideInPos}):Play()
+    local slideInPos = UDim2_new(1, -280, 1, -90)
+    TweenService:Create(notificationFrame, TweenInfo_new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = slideInPos}):Play()
     
     task.delay(duration, function()
         if notificationFrame and notificationFrame.Parent then
-            local slideOutPos = UDim2.new(1, 10, 1, -90)
-            local tween = TweenService:Create(notificationFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = slideOutPos})
+            local slideOutPos = UDim2_new(1, 10, 1, -90)
+            local tween = TweenService:Create(notificationFrame, TweenInfo_new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = slideOutPos})
             tween:Play()
             tween.Completed:Connect(function()
                 notificationFrame:Destroy()
@@ -107,12 +119,13 @@ local function findMyPlot()
     local gardens = workspace:FindFirstChild("Gardens")
     if not gardens then return nil end
     
+    local userIdStr = tostring(LocalPlayer.UserId)
     for _, plot in ipairs(gardens:GetChildren()) do
         if plot.Name:match("^Plot") or plot:FindFirstChild("Plants") then
             local owner = plot:FindFirstChild("Owner")
             if owner then
                 if owner:IsA("ValueBase") then
-                    if owner.Value == LocalPlayer or owner.Value == LocalPlayer.Name or tostring(owner.Value) == tostring(LocalPlayer.UserId) then
+                    if owner.Value == LocalPlayer or owner.Value == LocalPlayer.Name or tostring(owner.Value) == userIdStr then
                         return plot
                     end
                 elseif owner:IsA("Player") and owner == LocalPlayer then
@@ -123,7 +136,7 @@ local function findMyPlot()
             for _, child in ipairs(plot:GetChildren()) do
                 if child.Name:lower():match("owner") or child.Name:lower():match("player") then
                     if child:IsA("ValueBase") then
-                        if child.Value == LocalPlayer or child.Value == LocalPlayer.Name or tostring(child.Value) == tostring(LocalPlayer.UserId) then
+                        if child.Value == LocalPlayer or child.Value == LocalPlayer.Name or tostring(child.Value) == userIdStr then
                             return plot
                         end
                     end
@@ -132,18 +145,17 @@ local function findMyPlot()
             
             for attrName, attrValue in pairs(plot:GetAttributes()) do
                 if attrName:lower():match("owner") or attrName:lower():match("player") then
-                    if attrValue == LocalPlayer.Name or tostring(attrValue) == tostring(LocalPlayer.UserId) or attrValue == LocalPlayer then
+                    if attrValue == LocalPlayer.Name or tostring(attrValue) == userIdStr or attrValue == LocalPlayer then
                         return plot
                     end
                 end
             end
             
-            if plot.Name == LocalPlayer.Name or plot.Name == tostring(LocalPlayer.UserId) then
+            if plot.Name == LocalPlayer.Name or plot.Name == userIdStr then
                 return plot
             end
         end
     end
-    
     return nil
 end
 
@@ -162,18 +174,62 @@ local function getMyPlot()
     return myPlot
 end
 
+local originalCanCollide = {}
+
+local function restoreCollisions()
+    if next(originalCanCollide) ~= nil then
+        pcall(function()
+            for part, originalVal in pairs(originalCanCollide) do
+                if part and part.Parent then
+                    part.CanCollide = originalVal
+                end
+            end
+        end)
+        table.clear(originalCanCollide)
+    end
+end
+
+local function countReadyFruits()
+    local plot = getMyPlot()
+    if not plot then return 0 end
+    
+    local count = 0
+    local plants = plot:FindFirstChild("Plants")
+    if plants then
+        local function checkObject(obj)
+            local harvestPart = obj:FindFirstChild("HarvestPart")
+            if harvestPart then
+                local prompt = harvestPart:FindFirstChild("HarvestPrompt") or harvestPart:FindFirstChildWhichIsA("ProximityPrompt")
+                if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled then
+                    count = count + 1
+                end
+            end
+        end
+        
+        for _, plant in ipairs(plants:GetChildren()) do
+            checkObject(plant)
+            local fruitsFolder = plant:FindFirstChild("Fruits")
+            if fruitsFolder then
+                for _, fruit in ipairs(fruitsFolder:GetChildren()) do
+                    checkObject(fruit)
+                end
+            end
+        end
+    end
+    return count
+end
+
 local function harvestObject(obj, rootPart)
     local harvestPart = obj:FindFirstChild("HarvestPart")
     if harvestPart then
         local prompt = harvestPart:FindFirstChild("HarvestPrompt") or harvestPart:FindFirstChildWhichIsA("ProximityPrompt")
         if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled then
-            pcall(function() rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
-            rootPart.CFrame = harvestPart.CFrame * CFrame.new(0, 1.5, 0)
-            task.wait(0.15)
+            pcall(function() rootPart.AssemblyLinearVelocity = Vector3_new(0, 0, 0) end)
+            rootPart.CFrame = harvestPart.CFrame * CFrame_new(0, 1.5, 0)
+            task.wait(0.04)
             
             if prompt.Enabled then
                 fireproximityprompt(prompt)
-                task.wait(0.05)
             end
             return true
         end
@@ -185,58 +241,89 @@ task.spawn(function()
     while _G.PrivateProjectActive do
         task.wait(0.5)
         
-        if _G.AutoHarvest then
-            local character = LocalPlayer.Character
-            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-            
-            if rootPart then
-                _G.IsHarvesting = true
-                pcall(function() rootPart.Anchored = true end)
+        if _G.AutoHarvest and not _G.IsHarvesting then
+            local readyCount = countReadyFruits()
+            if readyCount >= (_G.MinFruitsToHarvest or 10) then
+                local character = LocalPlayer.Character
+                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
                 
-                pcall(function()
-                    local plot = getMyPlot()
-                    if plot then
-                        local plants = plot:FindFirstChild("Plants")
-                        if plants then
-                            local originalCFrame = rootPart.CFrame
-                            local teleported = false
-                            
-                            for _, plant in ipairs(plants:GetChildren()) do
-                                if not _G.AutoHarvest or not _G.PrivateProjectActive then break end
+                if rootPart then
+                    local bv = Instance_new("BodyVelocity")
+                    bv.Velocity = Vector3_new(0, 0, 0)
+                    bv.MaxForce = Vector3_new(9e9, 9e9, 9e9)
+                    bv.Parent = rootPart
+                    
+                    local bg = Instance_new("BodyGyro")
+                    bg.MaxTorque = Vector3_new(9e9, 9e9, 9e9)
+                    bg.CFrame = rootPart.CFrame
+                    bg.Parent = rootPart
+                    
+                    _G.IsHarvesting = true
+                    
+                    pcall(function()
+                        local plot = getMyPlot()
+                        if plot then
+                            local plants = plot:FindFirstChild("Plants")
+                            if plants then
+                                local originalCFrame = rootPart.CFrame
+                                local teleported = false
                                 
-                                local plantHarvested = harvestObject(plant, rootPart)
-                                if plantHarvested then
-                                    teleported = true
-                                end
-                                
-                                local fruitsFolder = plant:FindFirstChild("Fruits")
-                                if fruitsFolder then
-                                    for _, fruit in ipairs(fruitsFolder:GetChildren()) do
-                                        if not _G.AutoHarvest or not _G.PrivateProjectActive then break end
-                                        
-                                        local fruitHarvested = harvestObject(fruit, rootPart)
-                                        if fruitHarvested then
-                                            teleported = true
+                                for _, plant in ipairs(plants:GetChildren()) do
+                                    if not _G.AutoHarvest or not _G.PrivateProjectActive then break end
+                                    
+                                    local plantHarvested = harvestObject(plant, rootPart)
+                                    if plantHarvested then
+                                        teleported = true
+                                    end
+                                    
+                                    local fruitsFolder = plant:FindFirstChild("Fruits")
+                                    if fruitsFolder then
+                                        for _, fruit in ipairs(fruitsFolder:GetChildren()) do
+                                            if not _G.AutoHarvest or not _G.PrivateProjectActive then break end
+                                            
+                                            local fruitHarvested = harvestObject(fruit, rootPart)
+                                            if fruitHarvested then
+                                                teleported = true
+                                            end
                                         end
                                     end
                                 end
-                            end
-                            
-                            if teleported and _G.AutoHarvest and rootPart and rootPart.Parent then
-                                pcall(function() rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
-                                rootPart.CFrame = originalCFrame
-                                task.wait(0.1)
+                                
+                                if teleported and _G.AutoHarvest and rootPart and rootPart.Parent then
+                                    _G.IsHarvesting = false
+                                    restoreCollisions()
+                                    
+                                    for i = 1, 5 do
+                                        RunService.Stepped:Wait()
+                                    end
+                                    
+                                    pcall(function() rootPart.AssemblyLinearVelocity = Vector3_new(0, 0, 0) end)
+                                    rootPart.CFrame = originalCFrame * CFrame_new(0, 3.5, 0)
+                                    task.wait(0.25)
+                                end
                             end
                         end
-                    end
-                end)
-                
-                pcall(function() rootPart.Anchored = false end)
-                _G.IsHarvesting = false
+                    end)
+                    
+                    if bv then pcall(function() bv:Destroy() end) end
+                    if bg then pcall(function() bg:Destroy() end) end
+                    _G.IsHarvesting = false
+                end
             end
         end
     end
 end)
+
+local cachedRemoteEvent = nil
+local function getRemoteEvent()
+    if cachedRemoteEvent and cachedRemoteEvent.Parent then
+        return cachedRemoteEvent
+    end
+    pcall(function()
+        cachedRemoteEvent = game:GetService("ReplicatedStorage").SharedModules.Packet.RemoteEvent
+    end)
+    return cachedRemoteEvent
+end
 
 task.spawn(function()
     while _G.PrivateProjectActive do
@@ -244,15 +331,397 @@ task.spawn(function()
         
         if _G.AutoSell then
             pcall(function()
-                local event = game:GetService("ReplicatedStorage")
-                    :WaitForChild("SharedModules", 2)
-                    :WaitForChild("Packet", 2)
-                    :WaitForChild("RemoteEvent", 2)
-                
-                if event and event:IsA("RemoteEvent") then
+                local event = getRemoteEvent()
+                if event then
                     event:FireServer(buffer.fromstring("\x99\x00\x11"))
                 end
             end)
+        end
+    end
+end)
+
+local RestockSeeds = {
+    "Carrot", "Strawberry", "Blueberry", "Tulip", "Tomato", "Apple", "Bamboo",
+    "Corn", "Cactus", "Pineapple", "Mushroom", "Green Bean", "Banana", "Grape",
+    "Coconut", "Mango", "Dragon Fruit", "Acorn", "Cherry", "Sunflower",
+    "Venus Fly Trap", "Pomegranate", "Poison Apple", "Moon Bloom", "Dragon's Breath"
+}
+
+for _, seed in ipairs(RestockSeeds) do
+    _G.SelectedSeeds[seed] = false
+end
+
+local function cleanString(str)
+    return str:lower():gsub("[^%a%d]", "")
+end
+
+local SeedTranslations = {
+    ["Carrot"] = {"морков", "carrot"},
+    ["Strawberry"] = {"клубник", "strawberry"},
+    ["Blueberry"] = {"черник", "blueberry"},
+    ["Tulip"] = {"тюльпан", "tulip"},
+    ["Tomato"] = {"помидор", "томат", "tomato"},
+    ["Apple"] = {"яблок", "apple"},
+    ["Bamboo"] = {"бамбук", "bamboo"},
+    ["Corn"] = {"кукуруз", "corn"},
+    ["Cactus"] = {"кактус", "cactus"},
+    ["Pineapple"] = {"ананас", "pineapple"},
+    ["Mushroom"] = {"гриб", "mushroom"},
+    ["Green Bean"] = {"зелен", "фасол", "greenbean"},
+    ["Banana"] = {"банан", "banana"},
+    ["Grape"] = {"виноград", "grape"},
+    ["Coconut"] = {"кокос", "coconut"},
+    ["Mango"] = {"манго", "mango"},
+    ["Dragon Fruit"] = {"дракон", "dragonfruit"},
+    ["Acorn"] = {"желуд", "acorn"},
+    ["Cherry"] = {"вишн", "черешн", "cherry"},
+    ["Sunflower"] = {"подсолнух", "sunflower"},
+    ["Venus Fly Trap"] = {"мухоловк", "venusflytrap"},
+    ["Pomegranate"] = {"гранат", "pomegranate"},
+    ["Poison Apple"] = {"ядовит", "poisonapple"},
+    ["Moon Bloom"] = {"лун", "moonbloom"},
+    ["Dragon's Breath"] = {"дыхани", "дракон", "dragonsbreath"}
+}
+
+local function isSeedNameInText(seedName, text)
+    local lowerText = text:lower()
+    local trans = SeedTranslations[seedName]
+    if trans then
+        for _, term in ipairs(trans) do
+            if lowerText:find(term) then
+                return true
+            end
+        end
+    end
+    local cleanSeed = cleanString(seedName)
+    local cleanText = cleanString(text)
+    return cleanText:find(cleanSeed) ~= nil
+end
+
+local function findSeedFrame(seedName)
+    local shop = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("SeedShop")
+    if not shop then return nil end
+    local normalShop = shop:FindFirstChild("Frame") and shop.Frame:FindFirstChild("NormalShop")
+    if not normalShop then return nil end
+    
+    local targetClean = cleanString(seedName)
+    local frame = normalShop:FindFirstChild(seedName)
+    if frame then return frame end
+    
+    for _, child in ipairs(normalShop:GetChildren()) do
+        if cleanString(child.Name) == targetClean then
+            return child
+        end
+    end
+    
+    for _, child in ipairs(normalShop:GetChildren()) do
+        local childClean = cleanString(child.Name)
+        if childClean:match(targetClean) or targetClean:match(childClean) then
+            return child
+        end
+    end
+    return nil
+end
+
+local function activateGuiObject(obj)
+    if not obj then return end
+    
+    pcall(function()
+        local vim = game:GetService("VirtualInputManager")
+        local absPos = obj.AbsolutePosition
+        local absSize = obj.AbsoluteSize
+        local center = absPos + (absSize / 2)
+        vim:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 1)
+        task.wait(0.02)
+        vim:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 1)
+    end)
+    
+    pcall(function()
+        if firesignal then
+            firesignal(obj.Activated)
+        end
+    end)
+    pcall(function()
+        for _, conn in ipairs(getconnections(obj.Activated)) do
+            conn:Fire()
+        end
+    end)
+    
+    pcall(function()
+        if firesignal then
+            firesignal(obj.MouseButton1Click)
+        end
+    end)
+    pcall(function()
+        for _, conn in ipairs(getconnections(obj.MouseButton1Click)) do
+            conn:Fire()
+        end
+    end)
+    
+    pcall(function()
+        if firesignal then
+            firesignal(obj.MouseButton1Down)
+            firesignal(obj.MouseButton1Up)
+        end
+    end)
+    
+    pcall(function()
+        if firesignal then
+            local mockInputBegan = {
+                UserInputType = Enum.UserInputType.MouseButton1,
+                UserInputState = Enum.UserInputState.Begin,
+                Position = Vector3_new(0, 0, 0)
+            }
+            local mockInputEnded = {
+                UserInputType = Enum.UserInputType.MouseButton1,
+                UserInputState = Enum.UserInputState.End,
+                Position = Vector3_new(0, 0, 0)
+            }
+            firesignal(obj.InputBegan, mockInputBegan)
+            firesignal(obj.InputEnded, mockInputEnded)
+        end
+    end)
+    
+    pcall(function()
+        local mockInputBegan = {
+            UserInputType = Enum.UserInputType.MouseButton1,
+            UserInputState = Enum.UserInputState.Begin,
+            Position = Vector3_new(0, 0, 0)
+        }
+        for _, conn in ipairs(getconnections(obj.InputBegan)) do
+            conn:Fire(mockInputBegan)
+        end
+    end)
+end
+
+local function activateSeedCard(seedFrame)
+    if not seedFrame then return end
+    
+    local textButton = seedFrame:FindFirstChild("TextButton")
+    if textButton and textButton:IsA("GuiButton") then
+        activateGuiObject(textButton)
+        return
+    end
+    
+    for _, desc in ipairs(seedFrame:GetDescendants()) do
+        if desc:IsA("GuiButton") then
+            activateGuiObject(desc)
+            return
+        end
+    end
+    
+    local mainFrame = seedFrame:FindFirstChild("Main_Frame")
+    if mainFrame then
+        activateGuiObject(mainFrame)
+    else
+        activateGuiObject(seedFrame)
+    end
+end
+
+local function findBuyButton()
+    local shop = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("SeedShop")
+    if not shop then return nil end
+    
+    local normalShop = shop:FindFirstChild("Frame") and shop.Frame:FindFirstChild("NormalShop")
+    if not normalShop then return nil end
+    
+    local buyButton = nil
+    pcall(function()
+        buyButton = normalShop.Sheckles_Shelf.Main_Frame.Buttons.BuyButton
+    end)
+    if buyButton then return buyButton end
+    
+    for _, desc in ipairs(normalShop:GetDescendants()) do
+        if desc.Name == "BuyButton" and desc:IsA("GuiButton") then
+            return desc
+        end
+    end
+    return nil
+end
+
+local function isNoStock(normalShop)
+    local shecklesShelf = normalShop:FindFirstChild("Sheckles_Shelf")
+    if not shecklesShelf then return false end
+    
+    for _, desc in ipairs(shecklesShelf:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+            local txt = desc.Text:upper()
+            if txt:match("NO STOCK") or txt:match("OUT OF STOCK") or txt:match("НЕТ В НАЛИЧИИ") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function getShelfText()
+    local shop = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("SeedShop")
+    local normalShop = shop and shop:FindFirstChild("Frame") and shop.Frame:FindFirstChild("NormalShop")
+    local shecklesShelf = normalShop and normalShop:FindFirstChild("Sheckles_Shelf")
+    if not shecklesShelf then return "" end
+    
+    local combinedText = ""
+    for _, desc in ipairs(shecklesShelf:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+            combinedText = combinedText .. desc.Text .. "|"
+        end
+    end
+    return combinedText
+end
+
+local function isSeedSelected(seedName)
+    return isSeedNameInText(seedName, getShelfText())
+end
+
+local function scrollToFrame(scrollingFrame, targetFrame)
+    if not scrollingFrame or not targetFrame then return end
+    pcall(function()
+        if scrollingFrame:IsA("ScrollingFrame") then
+            local relativeY = targetFrame.AbsolutePosition.Y - scrollingFrame.AbsolutePosition.Y + scrollingFrame.CanvasPosition.Y
+            scrollingFrame.CanvasPosition = Vector2_new(scrollingFrame.CanvasPosition.X, relativeY - 25)
+            task.wait(0.1)
+        end
+    end)
+end
+
+local function ensureShopOpen()
+    local shop = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("SeedShop")
+    if shop then
+        pcall(function()
+            if not shop.Enabled then
+                shop.Enabled = true
+            end
+            if shop:FindFirstChild("Frame") and not shop.Frame.Visible then
+                shop.Frame.Visible = true
+            end
+        end)
+    end
+end
+
+local function closeShop()
+    local shop = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("SeedShop")
+    if shop then
+        pcall(function()
+            shop.Enabled = false
+            if shop:FindFirstChild("Frame") then
+                shop.Frame.Visible = false
+            end
+        end)
+    end
+end
+
+local function getPlayerCoins()
+    local coins = 9e9
+    pcall(function()
+        local gui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+        local target = gui.HUD.Currencies.CoinsCounter.Target
+        if target:IsA("ValueBase") then
+            coins = tonumber(target.Value) or 9e9
+        elseif target:IsA("TextLabel") or target:IsA("TextButton") then
+            local clean = target.Text:gsub("[^%d%.]", "")
+            coins = tonumber(clean) or 9e9
+        else
+            local val = target:FindFirstChild("Value") or target.Value or target.Text
+            local clean = tostring(val):gsub("[^%d%.]", "")
+            coins = tonumber(clean) or 9e9
+        end
+    end)
+    return coins
+end
+
+local function buySeed(seedName)
+    local seedFrame = findSeedFrame(seedName)
+    if not seedFrame then return end
+    
+    local stockTextObj = seedFrame:FindFirstChild("Stock_Text", true)
+    if stockTextObj and stockTextObj:IsA("TextLabel") then
+        local txt = stockTextObj.Text:lower()
+        if txt:find("x0") or txt:find("0 in stock") or txt:find("нет в наличии") or txt:find("0 шт") then
+            return
+        end
+    end
+    
+    local costTextObj = seedFrame:FindFirstChild("Cost_Text", true)
+    if costTextObj and costTextObj:IsA("TextLabel") then
+        local price = tonumber(costTextObj.Text:gsub("[^%d%.]", ""))
+        if price then
+            local currentCoins = getPlayerCoins()
+            if price > currentCoins then
+                return
+            end
+        end
+    end
+    
+    ensureShopOpen()
+    task.wait(0.1)
+    
+    local shop = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("SeedShop")
+    local normalShop = shop and shop:FindFirstChild("Frame") and shop.Frame:FindFirstChild("NormalShop")
+    if normalShop and normalShop:IsA("ScrollingFrame") then
+        scrollToFrame(normalShop, seedFrame)
+    end
+    
+    local oldText = getShelfText()
+    activateSeedCard(seedFrame)
+    
+    local updated = false
+    for i = 1, 8 do
+        if not _G.AutoBuySeeds or not _G.PrivateProjectActive then return end
+        task.wait(0.05)
+        if getShelfText() ~= oldText then
+            updated = true
+            break
+        end
+    end
+    
+    local selected = updated or isSeedSelected(seedName)
+    if selected and isNoStock(normalShop) then
+        notify("No Stock", seedName .. " нет в наличии! Переход...", 1.5)
+        return
+    end
+    
+    local buyButton = findBuyButton()
+    if not buyButton then return end
+    
+    for i = 1, 10 do
+        if not _G.AutoBuySeeds or not _G.PrivateProjectActive then return end
+        if isNoStock(normalShop) then
+            notify("No Stock", seedName .. " закончился! Переход...", 1.5)
+            break
+        end
+        activateGuiObject(buyButton)
+        task.wait(0.05)
+    end
+end
+
+task.spawn(function()
+    while _G.PrivateProjectActive do
+        task.wait(1.0)
+        
+        if _G.AutoBuySeeds then
+            local selectedList = {}
+            for seedName, isSelected in pairs(_G.SelectedSeeds) do
+                if isSelected then
+                    table.insert(selectedList, seedName)
+                end
+            end
+            
+            if #selectedList > 0 then
+                ensureShopOpen()
+                task.wait(0.2)
+                
+                for _, seedName in ipairs(selectedList) do
+                    if not _G.AutoBuySeeds or not _G.PrivateProjectActive then break end
+                    buySeed(seedName)
+                end
+                
+                closeShop()
+                
+                for i = 1, 1500 do
+                    if not _G.AutoBuySeeds or not _G.PrivateProjectActive then break end
+                    task.wait(0.1)
+                end
+            end
         end
     end
 end)
@@ -269,40 +738,45 @@ local noclipConn = RunService.Stepped:Connect(function()
             local char = LocalPlayer.Character
             if char then
                 for _, part in ipairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") and part.CanCollide then
+                    if part:IsA("BasePart") then
+                        if originalCanCollide[part] == nil then
+                            originalCanCollide[part] = part.CanCollide
+                        end
                         part.CanCollide = false
                     end
                 end
             end
         end)
+    else
+        restoreCollisions()
     end
 end)
 table.insert(connections, noclipConn)
 
-local MainFrame = Instance.new("Frame")
+local MainFrame = Instance_new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 320, 0, 210)
-MainFrame.Position = UDim2.new(0.5, -160, 0.5, -105)
-MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+MainFrame.Size = UDim2_new(0, 480, 0, 340)
+MainFrame.Position = UDim2_new(0.5, -240, 0.5, -170)
+MainFrame.BackgroundColor3 = Color3_fromRGB(12, 12, 16)
 MainFrame.BackgroundTransparency = 0.15
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
 
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 12)
+local MainCorner = Instance_new("UICorner")
+MainCorner.CornerRadius = UDim_new(0, 12)
 MainCorner.Parent = MainFrame
 
-local MainStroke = Instance.new("UIStroke")
-MainStroke.Color = Color3.fromRGB(255, 255, 255)
+local MainStroke = Instance_new("UIStroke")
+MainStroke.Color = Color3_fromRGB(255, 255, 255)
 MainStroke.Thickness = 1.5
 MainStroke.Parent = MainFrame
 
-local StrokeGradient = Instance.new("UIGradient")
+local StrokeGradient = Instance_new("UIGradient")
 StrokeGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 220, 255)),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(130, 50, 255)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 220, 255))
+    ColorSequenceKeypoint.new(0, Color3_fromRGB(0, 220, 255)),
+    ColorSequenceKeypoint.new(0.5, Color3_fromRGB(130, 50, 255)),
+    ColorSequenceKeypoint.new(1, Color3_fromRGB(0, 220, 255))
 })
 StrokeGradient.Rotation = 45
 StrokeGradient.Parent = MainStroke
@@ -317,76 +791,76 @@ task.spawn(function()
     end
 end)
 
-local TopBar = Instance.new("Frame")
+local TopBar = Instance_new("Frame")
 TopBar.Name = "TopBar"
-TopBar.Size = UDim2.new(1, 0, 0, 42)
-TopBar.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+TopBar.Size = UDim2_new(1, 0, 0, 42)
+TopBar.BackgroundColor3 = Color3_fromRGB(20, 20, 24)
 TopBar.BackgroundTransparency = 0.1
 TopBar.BorderSizePixel = 0
 TopBar.Parent = MainFrame
 
-local TopCorner = Instance.new("UICorner")
-TopCorner.CornerRadius = UDim.new(0, 12)
+local TopCorner = Instance_new("UICorner")
+TopCorner.CornerRadius = UDim_new(0, 12)
 TopCorner.Parent = TopBar
 
-local TopCover = Instance.new("Frame")
-TopCover.Size = UDim2.new(1, 0, 0, 8)
-TopCover.Position = UDim2.new(0, 0, 1, -8)
-TopCover.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+local TopCover = Instance_new("Frame")
+TopCover.Size = UDim2_new(1, 0, 0, 8)
+TopCover.Position = UDim2_new(0, 0, 1, -8)
+TopCover.BackgroundColor3 = Color3_fromRGB(20, 20, 24)
 TopCover.BorderSizePixel = 0
 TopCover.Parent = TopBar
 
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -70, 1, 0)
-Title.Position = UDim2.new(0, 15, 0, 0)
+local Title = Instance_new("TextLabel")
+Title.Size = UDim2_new(1, -70, 1, 0)
+Title.Position = UDim2_new(0, 15, 0, 0)
 Title.BackgroundTransparency = 1
 Title.Font = Enum.Font.GothamBold
-Title.Text = "privateproject.xyz"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Text = "privateproject.xyz | Garden Bot"
+Title.TextColor3 = Color3_fromRGB(255, 255, 255)
 Title.TextSize = 14
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = TopBar
 
-local TitleGlow = Instance.new("UIGradient")
-TitleGlow.Color = ColorSequence.new(Color3.fromRGB(0, 220, 255), Color3.fromRGB(180, 100, 255))
+local TitleGlow = Instance_new("UIGradient")
+TitleGlow.Color = ColorSequence.new(Color3_fromRGB(0, 220, 255), Color3_fromRGB(180, 100, 255))
 TitleGlow.Parent = Title
 
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0, 30, 0, 30)
-CloseBtn.Position = UDim2.new(1, -38, 0.5, -15)
+local CloseBtn = Instance_new("TextButton")
+CloseBtn.Size = UDim2_new(0, 30, 0, 30)
+CloseBtn.Position = UDim2_new(1, -38, 0.5, -15)
 CloseBtn.BackgroundTransparency = 1
 CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.Text = "×"
-CloseBtn.TextColor3 = Color3.fromRGB(140, 140, 150)
+CloseBtn.TextColor3 = Color3_fromRGB(140, 140, 150)
 CloseBtn.TextSize = 22
 CloseBtn.Parent = TopBar
 
-local MinBtn = Instance.new("TextButton")
+local MinBtn = Instance_new("TextButton")
 MinBtn.Size = UDim2.new(0, 30, 0, 30)
 MinBtn.Position = UDim2.new(1, -70, 0.5, -15)
 MinBtn.BackgroundTransparency = 1
 MinBtn.Font = Enum.Font.GothamBold
 MinBtn.Text = "−"
-MinBtn.TextColor3 = Color3.fromRGB(140, 140, 150)
+MinBtn.TextColor3 = Color3_fromRGB(140, 140, 150)
 MinBtn.TextSize = 20
 MinBtn.Parent = TopBar
 
 local function createBtnHover(btn, hoverColor)
     btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = hoverColor}):Play()
+        TweenService:Create(btn, TweenInfo_new(0.2), {TextColor3 = hoverColor}):Play()
     end)
     btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(140, 140, 150)}):Play()
+        TweenService:Create(btn, TweenInfo_new(0.2), {TextColor3 = Color3_fromRGB(140, 140, 150)}):Play()
     end)
 end
-createBtnHover(CloseBtn, Color3.fromRGB(255, 75, 75))
-createBtnHover(MinBtn, Color3.fromRGB(0, 220, 255))
+createBtnHover(CloseBtn, Color3_fromRGB(255, 75, 75))
+createBtnHover(MinBtn, Color3_fromRGB(0, 220, 255))
 
 local dragging, dragInput, dragStart, startPos
 local function updateDrag(input)
     local delta = input.Position - dragStart
-    local targetPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    TweenService:Create(MainFrame, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+    local targetPos = UDim2_new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    TweenService:Create(MainFrame, TweenInfo_new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = targetPos}):Play()
 end
 
 TopBar.InputBegan:Connect(function(input)
@@ -415,89 +889,235 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-local ContentFrame = Instance.new("Frame")
+local Sidebar = Instance_new("Frame")
+Sidebar.Name = "Sidebar"
+Sidebar.Size = UDim2_new(0, 120, 1, -42)
+Sidebar.Position = UDim2_new(0, 0, 0, 42)
+Sidebar.BackgroundColor3 = Color3_fromRGB(18, 18, 22)
+Sidebar.BackgroundTransparency = 0.2
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = MainFrame
+
+local SideDivider = Instance_new("Frame")
+SideDivider.Size = UDim2_new(0, 1, 1, -42)
+SideDivider.Position = UDim2_new(0, 120, 0, 42)
+SideDivider.BackgroundColor3 = Color3_fromRGB(35, 35, 45)
+SideDivider.BorderSizePixel = 0
+SideDivider.Parent = MainFrame
+
+local TabList = Instance_new("UIListLayout")
+TabList.SortOrder = Enum.SortOrder.LayoutOrder
+TabList.Padding = UDim_new(0, 6)
+TabList.Parent = Sidebar
+
+local SidePadding = Instance_new("UIPadding")
+SidePadding.PaddingTop = UDim_new(0, 12)
+SidePadding.PaddingLeft = UDim_new(0, 8)
+SidePadding.PaddingRight = UDim_new(0, 8)
+SidePadding.Parent = Sidebar
+
+local activeTab = "Main"
+local pages = {}
+local tabButtons = {}
+
+local ContentFrame = Instance_new("Frame")
 ContentFrame.Name = "ContentFrame"
-ContentFrame.Size = UDim2.new(1, -24, 1, -54)
-ContentFrame.Position = UDim2.new(0, 12, 0, 48)
+ContentFrame.Size = UDim2_new(1, -120, 1, -42)
+ContentFrame.Position = UDim2_new(0, 120, 0, 42)
 ContentFrame.BackgroundTransparency = 1
 ContentFrame.Parent = MainFrame
 
-local ContentLayout = Instance.new("UIListLayout")
-ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ContentLayout.Padding = UDim.new(0, 10)
-ContentLayout.Parent = ContentFrame
+local ContentPadding = Instance_new("UIPadding")
+ContentPadding.PaddingTop = UDim_new(0, 12)
+ContentPadding.PaddingLeft = UDim_new(0, 12)
+ContentPadding.PaddingRight = UDim_new(0, 12)
+ContentPadding.PaddingBottom = UDim_new(0, 12)
+ContentPadding.Parent = ContentFrame
+
+local function switchTab(name)
+    if activeTab == name then return end
+    
+    local oldBtn = tabButtons[activeTab]
+    local newBtn = tabButtons[name]
+    activeTab = name
+    
+    TweenService:Create(oldBtn, TweenInfo_new(0.2), {
+        BackgroundColor3 = Color3_fromRGB(18, 18, 22),
+        BackgroundTransparency = 1,
+        TextColor3 = Color3_fromRGB(160, 160, 170)
+    }):Play()
+    oldBtn.Font = Enum.Font.GothamSemibold
+    
+    TweenService:Create(newBtn, TweenInfo_new(0.2), {
+        BackgroundColor3 = Color3_fromRGB(0, 220, 255),
+        BackgroundTransparency = 0,
+        TextColor3 = Color3_fromRGB(12, 12, 16)
+    }):Play()
+    newBtn.Font = Enum.Font.GothamBold
+    
+    for pageName, pageFrame in pairs(pages) do
+        pageFrame.Visible = (pageName == name)
+    end
+end
+
+local function createTabButton(name, order)
+    local btn = Instance_new("TextButton")
+    btn.Size = UDim2_new(1, 0, 0, 32)
+    btn.BorderSizePixel = 0
+    btn.Text = name
+    btn.LayoutOrder = order
+    
+    local corner = Instance_new("UICorner")
+    corner.CornerRadius = UDim_new(0, 6)
+    corner.Parent = btn
+    
+    if name == activeTab then
+        btn.BackgroundColor3 = Color3_fromRGB(0, 220, 255)
+        btn.BackgroundTransparency = 0
+        btn.TextColor3 = Color3_fromRGB(12, 12, 16)
+        btn.Font = Enum.Font.GothamBold
+    else
+        btn.BackgroundColor3 = Color3_fromRGB(18, 18, 22)
+        btn.BackgroundTransparency = 1
+        btn.TextColor3 = Color3_fromRGB(160, 160, 170)
+        btn.Font = Enum.Font.GothamSemibold
+    end
+    btn.TextSize = 11
+    
+    tabButtons[name] = btn
+    
+    btn.MouseEnter:Connect(function()
+        if activeTab ~= name then
+            TweenService:Create(btn, TweenInfo_new(0.2), {
+                BackgroundColor3 = Color3_fromRGB(28, 28, 36),
+                BackgroundTransparency = 0,
+                TextColor3 = Color3_fromRGB(230, 230, 240)
+            }):Play()
+        end
+    end)
+    btn.MouseLeave:Connect(function()
+        if activeTab ~= name then
+            TweenService:Create(btn, TweenInfo_new(0.2), {
+                BackgroundColor3 = Color3_fromRGB(18, 18, 22),
+                BackgroundTransparency = 1,
+                TextColor3 = Color3_fromRGB(160, 160, 170)
+            }):Play()
+        end
+    end)
+    
+    btn.MouseButton1Click:Connect(function()
+        switchTab(name)
+    end)
+    
+    btn.Parent = Sidebar
+end
+
+createTabButton("Main", 1)
+createTabButton("Buy List", 2)
+
+local function createPageContainer(name)
+    local page = Instance_new("Frame")
+    page.Size = UDim2_new(1, 0, 1, 0)
+    page.BackgroundTransparency = 1
+    page.Visible = (name == activeTab)
+    page.Parent = ContentFrame
+    
+    pages[name] = page
+    return page
+end
+
+local MainPage = createPageContainer("Main")
+local BuyListPage = createPageContainer("Buy List")
+
+local MainScroll = Instance_new("ScrollingFrame")
+MainScroll.Size = UDim2_new(1, 0, 1, 0)
+MainScroll.BackgroundTransparency = 1
+MainScroll.BorderSizePixel = 0
+MainScroll.ScrollBarThickness = 4
+MainScroll.ScrollBarImageColor3 = Color3_fromRGB(50, 50, 60)
+MainScroll.CanvasSize = UDim2_new(0, 0, 0, 0)
+MainScroll.Parent = MainPage
+
+local MainLayout = Instance_new("UIListLayout")
+MainLayout.SortOrder = Enum.SortOrder.LayoutOrder
+MainLayout.Padding = UDim_new(0, 10)
+MainLayout.Parent = MainScroll
+
+MainLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    MainScroll.CanvasSize = UDim2_new(0, 0, 0, MainLayout.AbsoluteContentSize.Y + 10)
+end)
 
 local function createToggle(parent, text, default, callback)
-    local toggleFrame = Instance.new("Frame")
-    toggleFrame.Size = UDim2.new(1, 0, 0, 46)
-    toggleFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+    local toggleFrame = Instance_new("Frame")
+    toggleFrame.Size = UDim2_new(1, 0, 0, 46)
+    toggleFrame.BackgroundColor3 = Color3_fromRGB(18, 18, 22)
     toggleFrame.BackgroundTransparency = 0.2
     toggleFrame.BorderSizePixel = 0
     
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
+    local corner = Instance_new("UICorner")
+    corner.CornerRadius = UDim_new(0, 8)
     corner.Parent = toggleFrame
     
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(35, 35, 45)
+    local stroke = Instance_new("UIStroke")
+    stroke.Color = Color3_fromRGB(35, 35, 45)
     stroke.Thickness = 1
     stroke.Parent = toggleFrame
     
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -75, 1, 0)
-    label.Position = UDim2.new(0, 12, 0, 0)
+    local label = Instance_new("TextLabel")
+    label.Size = UDim2_new(1, -75, 1, 0)
+    label.Position = UDim2_new(0, 12, 0, 0)
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.GothamSemibold
     label.Text = text
-    label.TextColor3 = Color3.fromRGB(220, 220, 230)
+    label.TextColor3 = Color3_fromRGB(220, 220, 230)
     label.TextSize = 12
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = toggleFrame
     
-    local switchBtn = Instance.new("TextButton")
-    switchBtn.Size = UDim2.new(0, 50, 0, 24)
-    switchBtn.Position = UDim2.new(1, -62, 0.5, -12)
-    switchBtn.BackgroundColor3 = default and Color3.fromRGB(0, 220, 120) or Color3.fromRGB(45, 45, 50)
+    local switchBtn = Instance_new("TextButton")
+    switchBtn.Size = UDim2_new(0, 50, 0, 24)
+    switchBtn.Position = UDim2_new(1, -62, 0.5, -12)
+    switchBtn.BackgroundColor3 = default and Color3_fromRGB(0, 220, 120) or Color3_fromRGB(45, 45, 50)
     switchBtn.Text = ""
     switchBtn.AutoButtonColor = false
     switchBtn.Parent = toggleFrame
     
-    local switchCorner = Instance.new("UICorner")
-    switchCorner.CornerRadius = UDim.new(1, 0)
+    local switchCorner = Instance_new("UICorner")
+    switchCorner.CornerRadius = UDim_new(1, 0)
     switchCorner.Parent = switchBtn
     
-    local switchStroke = Instance.new("UIStroke")
-    switchStroke.Color = Color3.fromRGB(55, 55, 65)
+    local switchStroke = Instance_new("UIStroke")
+    switchStroke.Color = Color3_fromRGB(55, 55, 65)
     switchStroke.Thickness = 1
     switchStroke.Parent = switchBtn
     
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 16, 0, 16)
-    knob.Position = default and UDim2.new(1, -20, 0.5, -8) or UDim2.new(0, 4, 0.5, -8)
-    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    local knob = Instance_new("Frame")
+    knob.Size = UDim2_new(0, 16, 0, 16)
+    knob.Position = default and UDim2_new(1, -20, 0.5, -8) or UDim2_new(0, 4, 0.5, -8)
+    knob.BackgroundColor3 = Color3_fromRGB(255, 255, 255)
     knob.Parent = switchBtn
     
-    local knobCorner = Instance.new("UICorner")
-    knobCorner.CornerRadius = UDim.new(1, 0)
+    local knobCorner = Instance_new("UICorner")
+    knobCorner.CornerRadius = UDim_new(1, 0)
     knobCorner.Parent = knob
     
     local state = default
     
     local function toggleState()
         state = not state
-        local targetColor = state and Color3.fromRGB(0, 220, 120) or Color3.fromRGB(45, 45, 50)
-        local targetPos = state and UDim2.new(1, -20, 0.5, -8) or UDim2.new(0, 4, 0.5, -8)
+        local targetColor = state and Color3_fromRGB(0, 220, 120) or Color3_fromRGB(45, 45, 50)
+        local targetPos = state and UDim2_new(1, -20, 0.5, -8) or UDim2_new(0, 4, 0.5, -8)
         
-        TweenService:Create(switchBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundColor3 = targetColor}):Play()
-        TweenService:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+        TweenService:Create(switchBtn, TweenInfo_new(0.2, Enum.EasingStyle.Quad), {BackgroundColor3 = targetColor}):Play()
+        TweenService:Create(knob, TweenInfo_new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = targetPos}):Play()
         
         callback(state)
     end
     
     switchBtn.MouseButton1Click:Connect(toggleState)
     
-    local hitBtn = Instance.new("TextButton")
-    hitBtn.Size = UDim2.new(1, 0, 1, 0)
+    local hitBtn = Instance_new("TextButton")
+    hitBtn.Size = UDim2_new(1, 0, 1, 0)
     hitBtn.BackgroundTransparency = 1
     hitBtn.Text = ""
     hitBtn.ZIndex = 0
@@ -505,90 +1125,473 @@ local function createToggle(parent, text, default, callback)
     hitBtn.MouseButton1Click:Connect(toggleState)
     
     toggleFrame.MouseEnter:Connect(function()
-        TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(0, 220, 255)}):Play()
-        TweenService:Create(toggleFrame, TweenInfo.new(0.2), {BackgroundTransparency = 0.05}):Play()
+        TweenService:Create(stroke, TweenInfo_new(0.2), {Color = Color3_fromRGB(0, 220, 255)}):Play()
+        TweenService:Create(toggleFrame, TweenInfo_new(0.2), {BackgroundTransparency = 0.05}):Play()
     end)
     toggleFrame.MouseLeave:Connect(function()
-        TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(35, 35, 45)}):Play()
-        TweenService:Create(toggleFrame, TweenInfo.new(0.2), {BackgroundTransparency = 0.2}):Play()
+        TweenService:Create(stroke, TweenInfo_new(0.2), {Color = Color3_fromRGB(35, 35, 45)}):Play()
+        TweenService:Create(toggleFrame, TweenInfo_new(0.2), {BackgroundTransparency = 0.2}):Play()
     end)
     
     toggleFrame.Parent = parent
+    return toggleFrame, toggleState
 end
 
-createToggle(ContentFrame, "Auto Harvest Plants", false, function(val)
+local function createSlider(parent, text, min, max, default, callback)
+    local sliderFrame = Instance_new("Frame")
+    sliderFrame.Size = UDim2_new(1, 0, 0, 50)
+    sliderFrame.BackgroundColor3 = Color3_fromRGB(18, 18, 22)
+    sliderFrame.BackgroundTransparency = 0.2
+    sliderFrame.BorderSizePixel = 0
+    
+    local corner = Instance_new("UICorner")
+    corner.CornerRadius = UDim_new(0, 8)
+    corner.Parent = sliderFrame
+    
+    local stroke = Instance_new("UIStroke")
+    stroke.Color = Color3_fromRGB(35, 35, 45)
+    stroke.Thickness = 1
+    stroke.Parent = sliderFrame
+    
+    local label = Instance_new("TextLabel")
+    label.Size = UDim2_new(1, -20, 0, 20)
+    label.Position = UDim2_new(0, 12, 0, 6)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.GothamSemibold
+    label.Text = text .. ": " .. tostring(default)
+    label.TextColor3 = Color3_fromRGB(220, 220, 230)
+    label.TextSize = 11
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = sliderFrame
+    
+    local sliderBar = Instance_new("TextButton")
+    sliderBar.Size = UDim2_new(1, -24, 0, 5)
+    sliderBar.Position = UDim2_new(0, 12, 0, 32)
+    sliderBar.BackgroundColor3 = Color3_fromRGB(45, 45, 50)
+    sliderBar.BorderSizePixel = 0
+    sliderBar.Text = ""
+    sliderBar.AutoButtonColor = false
+    sliderBar.Parent = sliderFrame
+    
+    local barCorner = Instance_new("UICorner")
+    barCorner.CornerRadius = UDim_new(1, 0)
+    barCorner.Parent = sliderBar
+    
+    local sliderFill = Instance_new("Frame")
+    sliderFill.Size = UDim2_new((default - min) / (max - min), 0, 1, 0)
+    sliderFill.BackgroundColor3 = Color3_fromRGB(0, 220, 255)
+    sliderFill.BorderSizePixel = 0
+    sliderFill.Parent = sliderBar
+    
+    local fillCorner = Instance_new("UICorner")
+    fillCorner.CornerRadius = UDim_new(1, 0)
+    fillCorner.Parent = sliderFill
+    
+    local fillGradient = Instance_new("UIGradient")
+    fillGradient.Color = ColorSequence.new(Color3_fromRGB(0, 220, 255), Color3_fromRGB(180, 100, 255))
+    fillGradient.Parent = sliderFill
+    
+    local knob = Instance_new("Frame")
+    knob.Size = UDim2_new(0, 12, 0, 12)
+    knob.Position = UDim2_new((default - min) / (max - min), -6, 0.5, -6)
+    knob.BackgroundColor3 = Color3_fromRGB(255, 255, 255)
+    knob.BorderSizePixel = 0
+    knob.Parent = sliderBar
+    
+    local knobCorner = Instance_new("UICorner")
+    knobCorner.CornerRadius = UDim_new(1, 0)
+    knobCorner.Parent = knob
+    
+    local knobStroke = Instance_new("UIStroke")
+    knobStroke.Color = Color3_fromRGB(0, 220, 255)
+    knobStroke.Thickness = 1.5
+    knobStroke.Parent = knob
+    
+    local value = default
+    
+    local function updateValue(input)
+        local percentage = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
+        value = math.round(min + (max - min) * percentage)
+        
+        sliderFill.Size = UDim2_new(percentage, 0, 1, 0)
+        knob.Position = UDim2_new(percentage, -6, 0.5, -6)
+        label.Text = text .. ": " .. tostring(value)
+        
+        callback(value)
+    end
+    
+    local sliding = false
+    
+    sliderBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            sliding = true
+            updateValue(input)
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            updateValue(input)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            sliding = false
+        end
+    end)
+    
+    sliderFrame.MouseEnter:Connect(function()
+        TweenService:Create(stroke, TweenInfo_new(0.2), {Color = Color3_fromRGB(0, 220, 255)}):Play()
+        TweenService:Create(sliderFrame, TweenInfo_new(0.2), {BackgroundTransparency = 0.05}):Play()
+    end)
+    sliderFrame.MouseLeave:Connect(function()
+        TweenService:Create(stroke, TweenInfo_new(0.2), {Color = Color3_fromRGB(35, 35, 45)}):Play()
+        TweenService:Create(sliderFrame, TweenInfo_new(0.2), {BackgroundTransparency = 0.2}):Play()
+    end)
+    
+    sliderFrame.Parent = parent
+    return sliderFrame
+end
+
+local StatusCard = Instance_new("Frame")
+StatusCard.Size = UDim2_new(1, 0, 0, 50)
+StatusCard.BackgroundColor3 = Color3_fromRGB(18, 18, 22)
+StatusCard.BackgroundTransparency = 0.2
+StatusCard.BorderSizePixel = 0
+StatusCard.LayoutOrder = 0
+StatusCard.Parent = MainScroll
+
+local StatusCorner = Instance_new("UICorner")
+StatusCorner.CornerRadius = UDim_new(0, 8)
+StatusCorner.Parent = StatusCard
+
+local StatusStroke = Instance_new("UIStroke")
+StatusStroke.Color = Color3_fromRGB(35, 35, 45)
+StatusStroke.Thickness = 1
+StatusStroke.Parent = StatusCard
+
+local StatusLabel = Instance_new("TextLabel")
+StatusLabel.Size = UDim2_new(0.5, -15, 0, 20)
+StatusLabel.Position = UDim2_new(0, 12, 0, 6)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Font = Enum.Font.GothamBold
+StatusLabel.Text = "STATUS: IDLE"
+StatusLabel.TextColor3 = Color3_fromRGB(140, 140, 150)
+StatusLabel.TextSize = 10
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Parent = StatusCard
+
+local StatusDot = Instance_new("Frame")
+StatusDot.Size = UDim2_new(0, 8, 0, 8)
+StatusDot.Position = UDim2_new(0, 12, 0, 31)
+StatusDot.BackgroundColor3 = Color3_fromRGB(100, 100, 110)
+StatusDot.BorderSizePixel = 0
+StatusDot.Parent = StatusCard
+
+local DotCorner = Instance_new("UICorner")
+DotCorner.CornerRadius = UDim_new(1, 0)
+DotCorner.Parent = StatusDot
+
+local StatusDetailLabel = Instance_new("TextLabel")
+StatusDetailLabel.Size = UDim2_new(0.5, -20, 0, 20)
+StatusDetailLabel.Position = UDim2_new(0, 25, 0, 25)
+StatusDetailLabel.BackgroundTransparency = 1
+StatusDetailLabel.Font = Enum.Font.GothamMedium
+StatusDetailLabel.Text = "Enable Auto Harvest"
+StatusDetailLabel.TextColor3 = Color3_fromRGB(160, 160, 170)
+StatusDetailLabel.TextSize = 10
+StatusDetailLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusDetailLabel.Parent = StatusCard
+
+local CountLabel = Instance_new("TextLabel")
+CountLabel.Size = UDim2_new(0.5, -12, 1, 0)
+CountLabel.Position = UDim2_new(0.5, 0, 0, 0)
+CountLabel.BackgroundTransparency = 1
+CountLabel.Font = Enum.Font.GothamBold
+CountLabel.Text = "READY: 0"
+CountLabel.TextColor3 = Color3_fromRGB(0, 220, 255)
+CountLabel.TextSize = 12
+CountLabel.TextXAlignment = Enum.TextXAlignment.Right
+CountLabel.Parent = StatusCard
+
+task.spawn(function()
+    while _G.PrivateProjectActive do
+        pcall(function()
+            local ready = countReadyFruits()
+            local req = _G.MinFruitsToHarvest or 10
+            CountLabel.Text = string.format("READY: %d", ready)
+            
+            if _G.AutoHarvest then
+                if _G.IsHarvesting then
+                    StatusLabel.Text = "STATUS: HARVESTING"
+                    StatusLabel.TextColor3 = Color3_fromRGB(180, 100, 255)
+                    StatusDot.BackgroundColor3 = Color3_fromRGB(180, 100, 255)
+                    StatusDetailLabel.Text = "Sweeping plants..."
+                else
+                    StatusLabel.Text = "STATUS: MONITORING"
+                    StatusLabel.TextColor3 = Color3_fromRGB(0, 220, 255)
+                    StatusDot.BackgroundColor3 = Color3_fromRGB(0, 220, 255)
+                    if ready >= req then
+                        StatusDetailLabel.Text = "Triggering harvest..."
+                    else
+                        StatusDetailLabel.Text = string.format("Need %d more plant(s)", req - ready)
+                    end
+                end
+            else
+                StatusLabel.Text = "STATUS: IDLE"
+                StatusLabel.TextColor3 = Color3_fromRGB(140, 140, 150)
+                StatusDot.BackgroundColor3 = Color3_fromRGB(100, 100, 110)
+                StatusDetailLabel.Text = "Enable Auto Harvest"
+            end
+        end)
+        task.wait(0.2)
+    end
+end)
+
+local tFrame1 = createToggle(MainScroll, "Auto Harvest Plants", false, function(val)
     _G.AutoHarvest = val
     notify("Auto Harvest", val and "Авто-сбор урожая активирован" or "Авто-сбор урожая отключен")
 end)
+tFrame1.LayoutOrder = 1
 
-createToggle(ContentFrame, "Auto Sell Items", false, function(val)
+local sliderFrame = createSlider(MainScroll, "Min Fruits to Harvest", 10, 100, 10, function(val)
+    _G.MinFruitsToHarvest = val
+end)
+sliderFrame.LayoutOrder = 2
+
+local tFrame2 = createToggle(MainScroll, "Auto Sell Items", false, function(val)
     _G.AutoSell = val
     notify("Auto Sell", val and "Авто-продажа активирована" or "Авто-продажа отключена")
 end)
+tFrame2.LayoutOrder = 3
 
-local FooterFrame = Instance.new("Frame")
-FooterFrame.Size = UDim2.new(1, 0, 0, 32)
+local tFrame3 = createToggle(MainScroll, "Auto Buy Selected Seeds", false, function(val)
+    _G.AutoBuySeeds = val
+    notify("Auto Buy", val and "Авто-покупка активирована" or "Авто-покупка отключена")
+end)
+tFrame3.LayoutOrder = 4
+
+local FooterFrame = Instance_new("Frame")
+FooterFrame.Size = UDim2_new(1, 0, 0, 32)
 FooterFrame.BackgroundTransparency = 1
-FooterFrame.Parent = ContentFrame
+FooterFrame.LayoutOrder = 10
+FooterFrame.Parent = MainScroll
 
-local UnloadButton = Instance.new("TextButton")
-UnloadButton.Size = UDim2.new(1, 0, 1, 0)
-UnloadButton.BackgroundColor3 = Color3.fromRGB(192, 57, 43)
+local UnloadButton = Instance_new("TextButton")
+UnloadButton.Size = UDim2_new(1, 0, 1, 0)
+UnloadButton.BackgroundColor3 = Color3_fromRGB(192, 57, 43)
 UnloadButton.Font = Enum.Font.GothamBold
 UnloadButton.Text = "UNLOAD"
-UnloadButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+UnloadButton.TextColor3 = Color3_fromRGB(255, 255, 255)
 UnloadButton.TextSize = 11
 UnloadButton.AutoButtonColor = false
 UnloadButton.Parent = FooterFrame
 
-local UnloadCorner = Instance.new("UICorner")
-UnloadCorner.CornerRadius = UDim.new(0, 6)
+local UnloadCorner = Instance_new("UICorner")
+UnloadCorner.CornerRadius = UDim_new(0, 6)
 UnloadCorner.Parent = UnloadButton
 
 UnloadButton.MouseEnter:Connect(function()
-    TweenService:Create(UnloadButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(231, 76, 60)}):Play()
+    TweenService:Create(UnloadButton, TweenInfo_new(0.2), {BackgroundColor3 = Color3_fromRGB(231, 76, 60)}):Play()
 end)
 UnloadButton.MouseLeave:Connect(function()
-    TweenService:Create(UnloadButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(192, 57, 43)}):Play()
+    TweenService:Create(UnloadButton, TweenInfo_new(0.2), {BackgroundColor3 = Color3_fromRGB(192, 57, 43)}):Play()
 end)
 
-local MiniBtnFrame = Instance.new("Frame")
+local BuyHeader = Instance_new("Frame")
+BuyHeader.Size = UDim2_new(1, 0, 0, 28)
+BuyHeader.BackgroundTransparency = 1
+BuyHeader.Parent = BuyListPage
+
+local SelectAllBtn = Instance_new("TextButton")
+SelectAllBtn.Size = UDim2_new(0.5, -5, 1, 0)
+SelectAllBtn.BackgroundColor3 = Color3_fromRGB(35, 35, 45)
+SelectAllBtn.Font = Enum.Font.GothamBold
+SelectAllBtn.Text = "SELECT ALL"
+SelectAllBtn.TextColor3 = Color3_fromRGB(220, 220, 230)
+SelectAllBtn.TextSize = 10
+SelectAllBtn.Parent = BuyHeader
+
+local SelectAllCorner = Instance_new("UICorner")
+SelectAllCorner.CornerRadius = UDim_new(0, 6)
+SelectAllCorner.Parent = SelectAllBtn
+
+local DeselectAllBtn = Instance.new("TextButton")
+DeselectAllBtn.Size = UDim2_new(0.5, -5, 1, 0)
+DeselectAllBtn.Position = UDim2_new(0.5, 5, 0, 0)
+DeselectAllBtn.BackgroundColor3 = Color3_fromRGB(35, 35, 45)
+DeselectAllBtn.Font = Enum.Font.GothamBold
+DeselectAllBtn.Text = "DESELECT ALL"
+DeselectAllBtn.TextColor3 = Color3_fromRGB(220, 220, 230)
+DeselectAllBtn.TextSize = 10
+DeselectAllBtn.Parent = BuyHeader
+
+local DeselectAllCorner = Instance_new("UICorner")
+DeselectAllCorner.CornerRadius = UDim_new(0, 6)
+DeselectAllCorner.Parent = DeselectAllBtn
+
+local BuyScroll = Instance_new("ScrollingFrame")
+BuyScroll.Size = UDim2_new(1, 0, 1, -36)
+BuyScroll.Position = UDim2_new(0, 0, 0, 36)
+BuyScroll.BackgroundTransparency = 1
+BuyScroll.BorderSizePixel = 0
+BuyScroll.ScrollBarThickness = 4
+BuyScroll.ScrollBarImageColor3 = Color3_fromRGB(50, 50, 60)
+BuyScroll.CanvasSize = UDim2_new(0, 0, 0, 0)
+BuyScroll.Parent = BuyListPage
+
+local BuyGrid = Instance_new("UIGridLayout")
+BuyGrid.CellSize = UDim2_new(0.5, -6, 0, 32)
+BuyGrid.CellPadding = UDim2_new(0, 8, 0, 6)
+BuyGrid.SortOrder = Enum.SortOrder.Name
+BuyGrid.Parent = BuyScroll
+
+BuyGrid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    BuyScroll.CanvasSize = UDim2_new(0, 0, 0, BuyGrid.AbsoluteContentSize.Y + 10)
+end)
+
+local seedCheckboxes = {}
+
+local function createSeedCheckbox(parent, seedName)
+    local itemFrame = Instance_new("TextButton")
+    itemFrame.Name = seedName
+    itemFrame.Size = UDim2_new(1, 0, 1, 0)
+    itemFrame.BackgroundColor3 = Color3_fromRGB(18, 18, 22)
+    itemFrame.BackgroundTransparency = 0.2
+    itemFrame.Text = ""
+    itemFrame.AutoButtonColor = false
+    
+    local corner = Instance_new("UICorner")
+    corner.CornerRadius = UDim_new(0, 6)
+    corner.Parent = itemFrame
+    
+    local stroke = Instance_new("UIStroke")
+    stroke.Color = Color3_fromRGB(35, 35, 45)
+    stroke.Thickness = 1
+    stroke.Parent = itemFrame
+    
+    local label = Instance_new("TextLabel")
+    label.Size = UDim2_new(1, -32, 1, 0)
+    label.Position = UDim2_new(0, 8, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.GothamMedium
+    label.Text = seedName
+    label.TextColor3 = Color3_fromRGB(180, 180, 190)
+    label.TextSize = 11
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = itemFrame
+    
+    local indicator = Instance_new("Frame")
+    indicator.Size = UDim2_new(0, 14, 0, 14)
+    indicator.Position = UDim2_new(1, -22, 0.5, -7)
+    indicator.BackgroundColor3 = Color3_fromRGB(45, 45, 50)
+    indicator.Parent = itemFrame
+    
+    local indCorner = Instance_new("UICorner")
+    indCorner.CornerRadius = UDim_new(0, 3)
+    indCorner.Parent = indicator
+    
+    local indStroke = Instance_new("UIStroke")
+    indStroke.Color = Color3_fromRGB(55, 55, 65)
+    indStroke.Thickness = 1
+    indStroke.Parent = indicator
+    
+    local function updateVisual(selected)
+        if selected then
+            TweenService:Create(indicator, TweenInfo_new(0.15), {BackgroundColor3 = Color3_fromRGB(0, 220, 255)}):Play()
+            TweenService:Create(label, TweenInfo_new(0.15), {TextColor3 = Color3_fromRGB(255, 255, 255)}):Play()
+            stroke.Color = Color3_fromRGB(0, 220, 255)
+        else
+            TweenService:Create(indicator, TweenInfo_new(0.15), {BackgroundColor3 = Color3_fromRGB(45, 45, 50)}):Play()
+            TweenService:Create(label, TweenInfo_new(0.15), {TextColor3 = Color3_fromRGB(180, 180, 190)}):Play()
+            stroke.Color = Color3_fromRGB(35, 35, 45)
+        end
+    end
+    
+    itemFrame.MouseButton1Click:Connect(function()
+        _G.SelectedSeeds[seedName] = not _G.SelectedSeeds[seedName]
+        updateVisual(_G.SelectedSeeds[seedName])
+    end)
+    
+    itemFrame.MouseEnter:Connect(function()
+        if not _G.SelectedSeeds[seedName] then
+            TweenService:Create(stroke, TweenInfo_new(0.15), {Color = Color3_fromRGB(100, 100, 110)}):Play()
+        end
+    end)
+    itemFrame.MouseLeave:Connect(function()
+        if not _G.SelectedSeeds[seedName] then
+            TweenService:Create(stroke, TweenInfo_new(0.15), {Color = Color3_fromRGB(35, 35, 45)}):Play()
+        end
+    end)
+    
+    itemFrame.Parent = parent
+    
+    local cbObj = {
+        Update = function(val)
+            _G.SelectedSeeds[seedName] = val
+            updateVisual(val)
+        end
+    }
+    seedCheckboxes[seedName] = cbObj
+end
+
+for _, seed in ipairs(RestockSeeds) do
+    createSeedCheckbox(BuyScroll, seed)
+end
+
+SelectAllBtn.MouseButton1Click:Connect(function()
+    for _, seed in ipairs(RestockSeeds) do
+        seedCheckboxes[seed].Update(true)
+    end
+end)
+
+DeselectAllBtn.MouseButton1Click:Connect(function()
+    for _, seed in ipairs(RestockSeeds) do
+        seedCheckboxes[seed].Update(false)
+    end
+end)
+
+createBtnHover(SelectAllBtn, Color3_fromRGB(0, 220, 255))
+createBtnHover(DeselectAllBtn, Color3.fromRGB(255, 75, 75))
+
+local MiniBtnFrame = Instance_new("Frame")
 MiniBtnFrame.Name = "MiniBtnFrame"
-MiniBtnFrame.Size = UDim2.new(0, 48, 0, 48)
-MiniBtnFrame.Position = UDim2.new(0, 30, 0, 30)
-MiniBtnFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+MiniBtnFrame.Size = UDim2_new(0, 48, 0, 48)
+MiniBtnFrame.Position = UDim2_new(0, 30, 0, 30)
+MiniBtnFrame.BackgroundColor3 = Color3_fromRGB(12, 12, 16)
 MiniBtnFrame.BackgroundTransparency = 0.15
 MiniBtnFrame.BorderSizePixel = 0
 MiniBtnFrame.Visible = false
 MiniBtnFrame.Parent = ScreenGui
 
-local MiniCorner = Instance.new("UICorner")
-MiniCorner.CornerRadius = UDim.new(1, 0)
+local MiniCorner = Instance_new("UICorner")
+MiniCorner.CornerRadius = UDim_new(1, 0)
 MiniCorner.Parent = MiniBtnFrame
 
-local MiniStroke = Instance.new("UIStroke")
-MiniStroke.Color = Color3.fromRGB(0, 220, 255)
+local MiniStroke = Instance_new("UIStroke")
+MiniStroke.Color = Color3_fromRGB(0, 220, 255)
 MiniStroke.Thickness = 2.0
 MiniStroke.Parent = MiniBtnFrame
 
-local MiniClick = Instance.new("TextButton")
-MiniClick.Size = UDim2.new(1, 0, 1, 0)
+local MiniClick = Instance_new("TextButton")
+MiniClick.Size = UDim2_new(1, 0, 1, 0)
 MiniClick.BackgroundTransparency = 1
 MiniClick.Font = Enum.Font.GothamBold
 MiniClick.Text = "PP"
-MiniClick.TextColor3 = Color3.fromRGB(0, 220, 255)
+MiniClick.TextColor3 = Color3_fromRGB(0, 220, 255)
 MiniClick.TextSize = 18
 MiniClick.Parent = MiniBtnFrame
 
-local MiniGradient = Instance.new("UIGradient")
-MiniGradient.Color = ColorSequence.new(Color3.fromRGB(0, 220, 255), Color3.fromRGB(180, 100, 255))
+local MiniGradient = Instance_new("UIGradient")
+MiniGradient.Color = ColorSequence.new(Color3_fromRGB(0, 220, 255), Color3_fromRGB(180, 100, 255))
 MiniGradient.Parent = MiniClick
 
 local miniDragging, miniDragInput, miniDragStart, miniStartPos
 local function updateMiniDrag(input)
     local delta = input.Position - miniDragStart
-    local targetPos = UDim2.new(miniStartPos.X.Scale, miniStartPos.X.Offset + delta.X, miniStartPos.Y.Scale, miniStartPos.Y.Offset + delta.Y)
-    TweenService:Create(MiniBtnFrame, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+    local targetPos = UDim2_new(miniStartPos.X.Scale, miniStartPos.X.Offset + delta.X, miniStartPos.Y.Scale, miniStartPos.Y.Offset + delta.Y)
+    TweenService:Create(MiniBtnFrame, TweenInfo_new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = targetPos}):Play()
 end
 
 MiniClick.InputBegan:Connect(function(input)
@@ -619,9 +1622,9 @@ end)
 
 local function minimize()
     MainFrame.ClipsDescendants = true
-    local shrinkTween = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-        Size = UDim2.new(0, 0, 0, 0),
-        Position = UDim2.new(0, MiniBtnFrame.AbsolutePosition.X + 24, 0, MiniBtnFrame.AbsolutePosition.Y + 24),
+    local shrinkTween = TweenService:Create(MainFrame, TweenInfo_new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+        Size = UDim2_new(0, 0, 0, 0),
+        Position = UDim2_new(0, MiniBtnFrame.AbsolutePosition.X + 24, 0, MiniBtnFrame.AbsolutePosition.Y + 24),
         BackgroundTransparency = 1
     })
     shrinkTween:Play()
@@ -629,8 +1632,8 @@ local function minimize()
         MainFrame.Visible = false
         MiniBtnFrame.Visible = true
         MiniBtnFrame.Size = UDim2.new(0, 0, 0, 0)
-        TweenService:Create(MiniBtnFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Size = UDim2.new(0, 48, 0, 48)
+        TweenService:Create(MiniBtnFrame, TweenInfo_new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2_new(0, 48, 0, 48)
         }):Play()
     end)
 end
@@ -639,9 +1642,9 @@ local function restore()
     MiniBtnFrame.Visible = false
     MainFrame.Visible = true
     MainFrame.BackgroundTransparency = 0.15
-    local expandTween = TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, 320, 0, 210),
-        Position = UDim2.new(0.5, -160, 0.5, -105)
+    local expandTween = TweenService:Create(MainFrame, TweenInfo_new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 480, 0, 340),
+        Position = UDim2.new(0.5, -240, 0.5, -170)
     })
     expandTween:Play()
 end
@@ -657,6 +1660,7 @@ local function unloadScript()
     _G.PrivateProjectActive = false
     _G.AutoHarvest = false
     _G.AutoSell = false
+    _G.AutoBuySeeds = false
     _G.IsHarvesting = false
     
     notify("Unloading", "Выгрузка скрипта privateproject.xyz...", 1.5)
@@ -665,23 +1669,21 @@ local function unloadScript()
         if conn then pcall(function() conn:Disconnect() end) end
     end
     
+    restoreCollisions()
     pcall(function()
         local char = LocalPlayer.Character
         local rootPart = char and char:FindFirstChild("HumanoidRootPart")
         if rootPart then
             rootPart.Anchored = false
-        end
-        if char then
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = true
-                end
-            end
+            local bv = rootPart:FindFirstChildWhichIsA("BodyVelocity")
+            if bv then bv:Destroy() end
+            local bg = rootPart:FindFirstChildWhichIsA("BodyGyro")
+            if bg then bg:Destroy() end
         end
     end)
     
-    TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-        Size = UDim2.new(0, 320, 0, 0),
+    TweenService:Create(MainFrame, TweenInfo_new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Size = UDim2_new(0, 480, 0, 0),
         BackgroundTransparency = 1
     }):Play()
     
@@ -694,8 +1696,8 @@ UnloadButton.MouseButton1Click:Connect(unloadScript)
 
 MainFrame.Size = UDim2.new(0, 0, 0, 0)
 MainFrame.BackgroundTransparency = 1
-TweenService:Create(MainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-    Size = UDim2.new(0, 320, 0, 210),
+TweenService:Create(MainFrame, TweenInfo_new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+    Size = UDim2.new(0, 480, 0, 340),
     BackgroundTransparency = 0.15
 }):Play()
 
